@@ -7,7 +7,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'To-Do List App',
-      theme: ThemeData(primarySwatch: Colors.blue),
+      themeMode: ThemeMode.system,
       home: TodoListScreen(),
     );
   }
@@ -18,22 +18,85 @@ class TodoListScreen extends StatefulWidget {
   _TodoListScreenState createState() => _TodoListScreenState();
 }
 
-class _TodoListScreenState extends State<TodoListScreen> {
-  List<String> _tasks = []; // Список завдань
-  final TextEditingController _controller = TextEditingController(); // Контролер для введення завдання
-  bool _isAddingTask = false; // Статус, чи відображається поле для додавання завдання
+class _TodoListScreenState extends State<TodoListScreen> with TickerProviderStateMixin {
+  List<Map<String, dynamic>> _tasks = [];
+  final TextEditingController _controller = TextEditingController();
+  bool _isAddingTask = false;
+  bool _isButtonEnabled = false;
 
-  // Функція для додавання нового завдання
-  void _addTask(String task) {
-    if (task.isNotEmpty) {
+  // Метод для додавання нового завдання
+  void _addTask() {
+    if (_controller.text.trim().isNotEmpty) {
+      // Створення нового AnimationController для анімації кожного елементу
+      AnimationController animationController = AnimationController(
+        vsync: this,
+        duration: Duration(milliseconds: 300),
+      );
+
+      // Додаємо нове завдання в список
       setState(() {
-        _tasks.insert(0, task); // Додаємо завдання на початок списку
+        _tasks.insert(0, {
+          'title': _controller.text.trim(),
+          'isCompleted': false,
+          'animationController': animationController,
+        });
+
+        // Запускаємо анімацію для ново доданого завдання
+        animationController.forward();
       });
-      _controller.clear(); // Очищуємо поле після додавання
-      setState(() {
-        _isAddingTask = false; // Сховуємо поле вводу після додавання завдання
-      });
+
+      // Очищуємо поле вводу після додавання завдання
+      _controller.clear();
+      _isAddingTask = false;
+      _isButtonEnabled = false;
     }
+  }
+
+  // Метод для видалення завдання
+  void _removeTask(int index) {
+    // Спочатку виконуємо анімацію видалення (зворотній рух)
+    setState(() {
+      _tasks[index]['animationController'].reverse().then((_) {
+        setState(() {
+          _tasks.removeAt(index); // Видаляємо елемент після завершення анімації
+        });
+      });
+    });
+  }
+
+  // Метод для показу меню завдання (видалення завдання)
+  void _showTaskMenu(int index) {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 20),
+          child: Wrap(
+            children: [
+              ListTile(
+                leading: Icon(Icons.delete, color: Colors.red),
+                title: Text('Delete Task'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _removeTask(index);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Переміщення завдання в нове місце
+  void _onReorder(int oldIndex, int newIndex) {
+    setState(() {
+      if (oldIndex < newIndex) {
+        newIndex -= 1;
+      }
+      final task = _tasks.removeAt(oldIndex);
+      _tasks.insert(newIndex, task);
+    });
   }
 
   @override
@@ -43,10 +106,10 @@ class _TodoListScreenState extends State<TodoListScreen> {
         title: Text('To-Do List'),
         actions: [
           IconButton(
-            icon: Icon(Icons.add),
+            icon: Icon(_isAddingTask ? Icons.cancel_outlined : Icons.add),
             onPressed: () {
               setState(() {
-                _isAddingTask = !_isAddingTask; // Перемикаємо видимість поля вводу
+                _isAddingTask = !_isAddingTask;
               });
             },
           ),
@@ -56,12 +119,16 @@ class _TodoListScreenState extends State<TodoListScreen> {
         padding: const EdgeInsets.all(8.0),
         child: Column(
           children: [
-            // Якщо _isAddingTask true, то показуємо поле вводу для завдання
             if (_isAddingTask)
               Column(
                 children: [
                   TextField(
                     controller: _controller,
+                    onChanged: (text) {
+                      setState(() {
+                        _isButtonEnabled = text.trim().isNotEmpty;
+                      });
+                    },
                     decoration: InputDecoration(
                       labelText: 'Enter task',
                       border: OutlineInputBorder(),
@@ -69,29 +136,74 @@ class _TodoListScreenState extends State<TodoListScreen> {
                   ),
                   SizedBox(height: 10),
                   ElevatedButton(
-                    onPressed: () {
-                      _addTask(_controller.text);
-                    },
+                    onPressed: _isButtonEnabled ? _addTask : null,
                     child: Text('Add Task'),
                     style: ButtonStyle(
-                     ),
+                      backgroundColor: WidgetStateProperty.resolveWith<Color>(
+                        (Set<WidgetState> states) {
+                          if (states.contains(WidgetState.disabled)) {
+                            return Colors.grey.shade300;
+                          }
+                          return Colors.green;
+                        },
+                      ),
+                      foregroundColor: WidgetStateProperty.resolveWith<Color>(
+                        (Set<WidgetState> states) {
+                          if (states.contains(WidgetState.disabled)) {
+                            return Colors.grey;
+                          }
+                          return Colors.white;
+                        },
+                      ),
+                      padding: WidgetStateProperty.all(
+                        EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      minimumSize: WidgetStateProperty.all(Size(double.infinity, 50)),
+                    ),
                   ),
                 ],
               ),
             SizedBox(height: 20),
-            // Список завдань
             Expanded(
-              child: ListView.builder(
-                itemCount: _tasks.length,
-                itemBuilder: (ctx, index) {
-                  return ListTile(
-                    title: Text(_tasks[index]),
+              child: ReorderableListView(
+                onReorder: _onReorder, // Це функція для обробки перетягування
+                children: _tasks.map((task) {
+                  int index = _tasks.indexOf(task);
+                  return AnimatedBuilder(
+                    key: ValueKey(task['title']), // Це важливо для правильного відображення
+                    animation: task['animationController'],
+                    builder: (context, child) {
+                      return Opacity(
+                        opacity: task['animationController'].value,
+                        child: ListTile(
+                          leading: Checkbox(
+                            value: task['isCompleted'],
+                            onChanged: (bool? value) {
+                              setState(() {
+                                task['isCompleted'] = value!;
+                              });
+                            },
+                          ),
+                          title: AnimatedDefaultTextStyle(
+                            duration: Duration(milliseconds: 300),
+                            style: TextStyle(
+                              color: task['isCompleted'] ? Colors.grey : Colors.black,
+                              decoration: task['isCompleted']
+                                  ? TextDecoration.lineThrough
+                                  : TextDecoration.none,
+                            ),
+                            child: Text(task['title']),
+                          ),
+                          onLongPress: () => _showTaskMenu(index),
+                        ),
+                      );
+                    },
                   );
-                },
+                }).toList(),
               ),
             ),
-         ],
-       ),
+          ],
+        ),
       ),
     );
   }
