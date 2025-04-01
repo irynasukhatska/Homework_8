@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 void main() => runApp(MyApp());
 
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+  
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -14,15 +16,19 @@ class MyApp extends StatelessWidget {
 }
 
 class TodoListScreen extends StatefulWidget {
+  const TodoListScreen({super.key});
+
   @override
   _TodoListScreenState createState() => _TodoListScreenState();
 }
 
 class _TodoListScreenState extends State<TodoListScreen> with TickerProviderStateMixin {
-  List<Map<String, dynamic>> _tasks = [];
+  final List<Map<String, dynamic>> _tasks = [];
   final TextEditingController _controller = TextEditingController();
   bool _isAddingTask = false;
   bool _isButtonEnabled = false;
+  
+  get onSelected => null;
 
   // Метод для додавання нового завдання
   void _addTask() {
@@ -33,7 +39,7 @@ class _TodoListScreenState extends State<TodoListScreen> with TickerProviderStat
         duration: Duration(milliseconds: 300),
       );
 
-      // Додаємо нове завдання в список
+      // Додавання нового завдання в список
       setState(() {
         _tasks.insert(0, {
           'title': _controller.text.trim(),
@@ -41,7 +47,7 @@ class _TodoListScreenState extends State<TodoListScreen> with TickerProviderStat
           'animationController': animationController,
         });
 
-        // Запускаємо анімацію для ново доданого завдання
+        // Запускаємо анімацію для нового завдання
         animationController.forward();
       });
 
@@ -94,8 +100,8 @@ class _TodoListScreenState extends State<TodoListScreen> with TickerProviderStat
       if (oldIndex < newIndex) {
         newIndex -= 1;
       }
-      final task = _tasks.removeAt(oldIndex);
-      _tasks.insert(newIndex, task);
+      final item = _tasks.removeAt(oldIndex);
+      _tasks.insert(newIndex, item);
     });
   }
 
@@ -137,7 +143,6 @@ class _TodoListScreenState extends State<TodoListScreen> with TickerProviderStat
                   SizedBox(height: 10),
                   ElevatedButton(
                     onPressed: _isButtonEnabled ? _addTask : null,
-                    child: Text('Add Task'),
                     style: ButtonStyle(
                       backgroundColor: WidgetStateProperty.resolveWith<Color>(
                         (Set<WidgetState> states) {
@@ -160,6 +165,7 @@ class _TodoListScreenState extends State<TodoListScreen> with TickerProviderStat
                       ),
                       minimumSize: WidgetStateProperty.all(Size(double.infinity, 50)),
                     ),
+                    child: Text('Add Task'),
                   ),
                 ],
               ),
@@ -194,7 +200,25 @@ class _TodoListScreenState extends State<TodoListScreen> with TickerProviderStat
                             ),
                             child: Text(task['title']),
                           ),
-                          onLongPress: () => _showTaskMenu(index),
+                          trailing: PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'delete') {
+                              _removeTask(index);
+                            };
+                          },
+                          itemBuilder: (context) => [
+                            PopupMenuItem(
+                              value: 'delete',
+                              child: Row (
+                                children:[
+                                  Icon(Icons.delete, color: Colors.red),
+                                  SizedBox(width: 8),
+                                  Text('Delete Task'),
+                                ],
+                              ),
+                            ),
+                          ],
+                         ),
                         ),
                       );
                     },
